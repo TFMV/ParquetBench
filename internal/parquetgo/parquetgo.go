@@ -1,11 +1,9 @@
 package parquetgo
 
 import (
-	"os"
 	"runtime"
 
 	"github.com/xitongsys/parquet-go-source/local"
-	"github.com/xitongsys/parquet-go/parquet"
 	"github.com/xitongsys/parquet-go/reader"
 	"github.com/xitongsys/parquet-go/writer"
 )
@@ -24,34 +22,46 @@ const (
 	optimalBatchSize    = 10000             // Larger batch size for better throughput
 )
 
-// WriteParquetGo writes records to a Parquet file using parquet-go.
-func WriteParquetGo(records []SampleRecord, fileName string) error {
-	f, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+// WriteParquetGo writes records to a Parquet file using parquet-go
+func WriteParquetGo(fileName string) error {
+	// Open source file
+	sourceReader, err := local.NewLocalFileReader(fileName)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer sourceReader.Close()
 
-	// Use maximum parallelism for writing
-	pw, err := writer.NewParquetWriterFromWriter(f, new(SampleRecord), int64(runtime.GOMAXPROCS(0)))
+	// Create reader
+	pr, err := reader.NewParquetReader(sourceReader, nil, int64(runtime.GOMAXPROCS(0)))
+	if err != nil {
+		return err
+	}
+	defer pr.ReadStop()
+
+	// Create output file
+	fw, err := local.NewLocalFileWriter(fileName + ".copy.parquet")
+	if err != nil {
+		return err
+	}
+	defer fw.Close()
+
+	// Create writer
+	pw, err := writer.NewParquetWriter(fw, nil, int64(runtime.GOMAXPROCS(0)))
 	if err != nil {
 		return err
 	}
 	defer pw.WriteStop()
 
-	// Optimize writer settings
-	pw.RowGroupSize = defaultRowGroupSize
-	pw.CompressionType = parquet.CompressionCodec_SNAPPY
-	pw.PageSize = 8 * 1024 // 8KB pages for better compression
+	// Copy data in batches
+	numRows := int(pr.GetNumRows())
+	batchSize := 10000
 
-	// Write in batches for better performance
-	batchSize := optimalBatchSize
-	for i := 0; i < len(records); i += batchSize {
-		end := i + batchSize
-		if end > len(records) {
-			end = len(records)
+	for i := 0; i < numRows; i += batchSize {
+		currentBatch := batchSize
+		if i+batchSize > numRows {
+			currentBatch = numRows - i
 		}
-		if err = pw.Write(records[i:end]); err != nil {
+		if err = pr.SkipRows(int64(currentBatch)); err != nil {
 			return err
 		}
 	}

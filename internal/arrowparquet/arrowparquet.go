@@ -12,32 +12,70 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/pqarrow"
 )
 
-const (
-	defaultBatchSize    = 64 * 1024 * 1024  // 64MB batch size
-	defaultRowGroupSize = 128 * 1024 * 1024 // 128MB row group size
-)
-
 // WriteArrowParquet writes records to a Parquet file using Arrow
 func WriteArrowParquet(fileName string) error {
-	f, err := os.Create(fileName)
+	pool := memory.NewGoAllocator()
+
+	// First open source file
+	sourceReader, err := file.OpenParquetFile(fileName, false)
+	if err != nil {
+		return err
+	}
+	defer sourceReader.Close()
+
+	// Create Arrow file reader for the source
+	sourceFileReader, err := pqarrow.NewFileReader(sourceReader, pqarrow.ArrowReadProperties{}, pool)
+	if err != nil {
+		return err
+	}
+
+	// Get schema from source
+	schema, err := sourceFileReader.Schema()
+	if err != nil {
+		return err
+	}
+
+	// Create output file
+	f, err := os.Create(fileName + ".copy.parquet")
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	writerProps := parquet.NewWriterProperties(
+	// Create Arrow writer
+	w, err := pqarrow.NewFileWriter(schema, f, parquet.NewWriterProperties(
 		parquet.WithCompression(compress.Codecs.Snappy),
 		parquet.WithDictionaryDefault(true),
-		parquet.WithBatchSize(defaultBatchSize),
-		parquet.WithDataPageSize(1*1024*1024), // 1MB page size
-		parquet.WithMaxRowGroupLength(defaultRowGroupSize),
-	)
-
-	w := file.NewParquetWriter(f, nil, file.WithWriterProps(writerProps))
-
+		parquet.WithDataPageSize(1*1024*1024),
+	), pqarrow.ArrowWriterProperties{})
+	if err != nil {
+		return err
+	}
 	defer w.Close()
 
-	return nil
+	// Get record reader from source
+	recordReader, err := sourceFileReader.GetRecordReader(context.Background(), nil, nil)
+	if err != nil {
+		return err
+	}
+	defer recordReader.Release()
+
+	// Write records
+	for recordReader.Next() {
+		record := recordReader.Record()
+		if err := w.WriteBuffered(record); err != nil {
+			return err
+		}
+		record.Release()
+	}
+
+	// Check for errors, ignoring EOF
+	if err := recordReader.Err(); err != nil && err != io.EOF {
+		return err
+	}
+
+	// Ensure all buffered records are written
+	return w.Close()
 }
 
 // ReadArrowParquet reads records from a Parquet file using Arrow
