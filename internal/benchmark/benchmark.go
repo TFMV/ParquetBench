@@ -15,6 +15,7 @@ type BenchmarkResult struct {
 	Implementation string
 	Operation      string
 	Duration       time.Duration
+	RecordsCount   int64
 	Error          error
 }
 
@@ -36,44 +37,48 @@ func RunBenchmark(parquetFile string) ([]BenchmarkResult, error) {
 
 	// Benchmark Arrow read
 	start := time.Now()
-	err := arrowparquet.ReadArrowParquet(testFile)
+	recordsCount, err := arrowparquet.ReadArrowParquet(testFile)
 	results = append(results, BenchmarkResult{
 		Implementation: "Arrow",
 		Operation:      "Read",
 		Duration:       time.Since(start),
+		RecordsCount:   recordsCount,
 		Error:          err,
 	})
 
 	// Benchmark Arrow write
 	outFile := testFile + ".arrow.parquet"
 	start = time.Now()
-	err = arrowparquet.WriteArrowParquet(testFile)
+	recordsCount, err = arrowparquet.WriteArrowParquet(testFile)
 	results = append(results, BenchmarkResult{
 		Implementation: "Arrow",
 		Operation:      "Write",
 		Duration:       time.Since(start),
+		RecordsCount:   recordsCount,
 		Error:          err,
 	})
 	os.Remove(outFile) // Clean up output file
 
 	// Benchmark Parquet-Go read
 	start = time.Now()
-	_, err = parquetgo.ReadParquetGo(testFile)
+	recordsCount, err = parquetgo.ReadParquetGo(testFile)
 	results = append(results, BenchmarkResult{
 		Implementation: "ParquetGo",
 		Operation:      "Read",
 		Duration:       time.Since(start),
+		RecordsCount:   recordsCount,
 		Error:          err,
 	})
 
 	// Benchmark Parquet-Go write
 	outFile = testFile + ".parquetgo.parquet"
 	start = time.Now()
-	err = parquetgo.WriteParquetGo(testFile)
+	recordsCount, err = parquetgo.WriteParquetGo(testFile)
 	results = append(results, BenchmarkResult{
 		Implementation: "ParquetGo",
 		Operation:      "Write",
 		Duration:       time.Since(start),
+		RecordsCount:   recordsCount,
 		Error:          err,
 	})
 	os.Remove(outFile) // Clean up output file
@@ -102,7 +107,7 @@ func copyFile(src, dst string) error {
 // PrintResults formats and prints benchmark results
 func PrintResults(results []BenchmarkResult) {
 	fmt.Println("\n📊 Parquet Benchmark Results")
-	fmt.Println("══════════════════════════\n")
+	fmt.Println("══════════════════════════")
 
 	// Find the longest implementation name for padding
 	maxLen := 0
@@ -125,12 +130,19 @@ func PrintResults(results []BenchmarkResult) {
 		// Duration with color and formatting
 		duration := fmt.Sprintf("%8s", result.Duration.Round(time.Millisecond))
 
+		// Records count
+		records := ""
+		if result.RecordsCount > 0 {
+			records = fmt.Sprintf(" (%d records)", result.RecordsCount)
+		}
+
 		// Print the result line
-		fmt.Printf("%s %s %s: %s",
+		fmt.Printf("%s %s %s: %s%s",
 			status,
 			name,
 			result.Operation,
 			duration,
+			records,
 		)
 
 		if result.Error != nil {
