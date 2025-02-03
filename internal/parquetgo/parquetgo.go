@@ -23,79 +23,79 @@ const (
 )
 
 // WriteParquetGo writes records to a Parquet file using parquet-go
-func WriteParquetGo(fileName string) error {
+func WriteParquetGo(fileName string) (int64, error) {
 	// Open source file
 	sourceReader, err := local.NewLocalFileReader(fileName)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer sourceReader.Close()
 
 	// Create reader
 	pr, err := reader.NewParquetReader(sourceReader, nil, int64(runtime.GOMAXPROCS(0)))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer pr.ReadStop()
 
 	// Create output file
 	fw, err := local.NewLocalFileWriter(fileName + ".copy.parquet")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer fw.Close()
 
 	// Create writer
 	pw, err := writer.NewParquetWriter(fw, nil, int64(runtime.GOMAXPROCS(0)))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer pw.WriteStop()
 
 	// Copy data in batches
-	numRows := int(pr.GetNumRows())
+	numRows := pr.GetNumRows()
 	batchSize := 10000
 
-	for i := 0; i < numRows; i += batchSize {
+	for i := 0; i < int(numRows); i += batchSize {
 		currentBatch := batchSize
-		if i+batchSize > numRows {
-			currentBatch = numRows - i
+		if i+batchSize > int(numRows) {
+			currentBatch = int(numRows) - i
 		}
 		if err = pr.SkipRows(int64(currentBatch)); err != nil {
-			return err
+			return numRows, err
 		}
 	}
 
-	return nil
+	return numRows, nil
 }
 
 // ReadParquetGo reads records from a Parquet file using parquet-go
-func ReadParquetGo(fileName string) ([]SampleRecord, error) {
+func ReadParquetGo(fileName string) (int64, error) {
 	fr, err := local.NewLocalFileReader(fileName)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer fr.Close()
 
 	pr, err := reader.NewParquetReader(fr, nil, int64(runtime.GOMAXPROCS(0)))
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer pr.ReadStop()
 
 	// Read in batches
-	numRows := int(pr.GetNumRows())
+	numRows := pr.GetNumRows()
 	batchSize := 10000
 
-	for i := 0; i < numRows; i += batchSize {
+	for i := 0; i < int(numRows); i += batchSize {
 		currentBatch := batchSize
-		if i+batchSize > numRows {
-			currentBatch = numRows - i
+		if i+batchSize > int(numRows) {
+			currentBatch = int(numRows) - i
 		}
 		if err = pr.SkipRows(int64(currentBatch)); err != nil {
-			return nil, err
+			return numRows, err
 		}
 	}
 
-	return nil, nil
+	return numRows, nil
 }

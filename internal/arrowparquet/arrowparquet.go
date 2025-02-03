@@ -13,32 +13,32 @@ import (
 )
 
 // WriteArrowParquet writes records to a Parquet file using Arrow
-func WriteArrowParquet(fileName string) error {
+func WriteArrowParquet(fileName string) (int64, error) {
 	pool := memory.NewGoAllocator()
 
 	// First open source file
 	sourceReader, err := file.OpenParquetFile(fileName, false)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer sourceReader.Close()
 
 	// Create Arrow file reader for the source
 	sourceFileReader, err := pqarrow.NewFileReader(sourceReader, pqarrow.ArrowReadProperties{}, pool)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Get schema from source
 	schema, err := sourceFileReader.Schema()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Create output file
 	f, err := os.Create(fileName + ".copy.parquet")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer f.Close()
 
@@ -49,68 +49,70 @@ func WriteArrowParquet(fileName string) error {
 		parquet.WithDataPageSize(1*1024*1024),
 	), pqarrow.ArrowWriterProperties{})
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer w.Close()
 
 	// Get record reader from source
 	recordReader, err := sourceFileReader.GetRecordReader(context.Background(), nil, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer recordReader.Release()
 
-	// Write records
+	var count int64
 	for recordReader.Next() {
 		record := recordReader.Record()
+		count += record.NumRows()
 		if err := w.WriteBuffered(record); err != nil {
-			return err
+			return count, err
 		}
 		record.Release()
 	}
 
 	// Check for errors, ignoring EOF
 	if err := recordReader.Err(); err != nil && err != io.EOF {
-		return err
+		return count, err
 	}
 
 	// Ensure all buffered records are written
-	return w.Close()
+	return count, w.Close()
 }
 
 // ReadArrowParquet reads records from a Parquet file using Arrow
-func ReadArrowParquet(fileName string) error {
+func ReadArrowParquet(fileName string) (int64, error) {
 	pool := memory.NewGoAllocator()
 
 	// Open the file
 	rdr, err := file.OpenParquetFile(fileName, false)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer rdr.Close()
 
 	// Create Arrow file reader
 	fileReader, err := pqarrow.NewFileReader(rdr, pqarrow.ArrowReadProperties{}, pool)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Get record reader for all columns and row groups
 	recordReader, err := fileReader.GetRecordReader(context.Background(), nil, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer recordReader.Release()
 
-	// Read all records
+	var count int64
 	for recordReader.Next() {
 		record := recordReader.Record()
+		count += record.NumRows()
 		record.Release() // Release immediately since we're just reading
 	}
 
 	if err := recordReader.Err(); err != nil && err != io.EOF {
-		return err
+		return count, err
 	}
 
-	return nil
+	return count, nil
 }
