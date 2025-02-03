@@ -16,11 +16,13 @@ It generates sample data, writes and reads it using both libraries, and prints a
 ## Usage
 
 1. Install dependencies:
+
    ```bash
    go mod tidy
    ```
 
 2. Run the benchmarks:
+
    ```bash
    go run cmd/main.go
    ```
@@ -46,8 +48,10 @@ Benchmark Report:
 📊 Parquet Benchmark Results
 ══════════════════════════
 
-✅ Arrow     Read:   1.136s
-✅ ParquetGo Read:   3.069s
+✅ Arrow     Read:    971ms
+✅ Arrow     Write:   4.942s
+✅ ParquetGo Read:   2.941s
+✅ ParquetGo Write:   2.754s
 ```
 
 ## Author
@@ -57,5 +61,3 @@ This project is created by [TFMV](https://github.com/TFMV).
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-
