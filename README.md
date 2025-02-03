@@ -43,11 +43,11 @@ Running Parquet Benchmarks...
 
 Benchmark Report:
 
-Library    Operation  Duration   Throughput
-parquet-go write      1.23s      813.05
-arrow      write      1.56s      640.98
-parquet-go read       1.12s      892.86
-arrow      read       1.45s      689.66
+📊 Parquet Benchmark Results
+══════════════════════════
+
+✅ Arrow     Read:   1.136s
+✅ ParquetGo Read:   3.069s
 ```
 
 ## Author
